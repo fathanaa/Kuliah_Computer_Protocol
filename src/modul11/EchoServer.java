@@ -11,21 +11,16 @@ import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.Set;
 
-public class CharGenServer {
-    public static int DEFAULT_PORT = 19;
+public class EchoServer {
+    public static int DEFAULT_PORT = 7;
     public static void main(String[] args) {
         int port;
-        try{
+        try {
             port = Integer.parseInt(args[0]);
-        }catch(RuntimeException ex){
+        } catch (RuntimeException ex) {
             port = DEFAULT_PORT;
         }
-        System.out.println("Listening for conn. on port "+port);
-        byte[] rotation = new byte[95*2];
-        for (byte i = 'a'; i <= '~'; i++){
-            rotation[i-'a'] = i;
-            rotation[i+95-'a'] = i;
-        }
+        System.out.println("Listening for connections on port " + port);
         ServerSocketChannel serverChannel;
         Selector selector;
         try {
@@ -53,43 +48,44 @@ public class CharGenServer {
                 SelectionKey key = iterator.next();
                 iterator.remove();
                 try {
-                    if (key.isAcceptable()){
-                        ServerSocketChannel server = (ServerSocketChannel) key.channel();
+                    if (key.isAcceptable()) {
+                        ServerSocketChannel server =
+                                (ServerSocketChannel) key.channel();
                         SocketChannel client = server.accept();
-                        System.out.println("Accepted connection from "+client);
+                        System.out.println
+                                ("Accepted connection from " + client);
                         client.configureBlocking(false);
-                        SelectionKey key2 = client.register(selector, SelectionKey.OP_WRITE);
-                        ByteBuffer buffer = ByteBuffer.allocate(74);
-                        buffer.put(rotation, 0, 72);
-                        buffer.put((byte) '\r');
-                        buffer.put((byte) '\n');
-                        buffer.flip();
-                        key2.attach(buffer);
-
-                    }else if (key.isWritable()){
-                        SocketChannel client = (SocketChannel) key.channel();
-                        ByteBuffer buffer = (ByteBuffer) key.attachment();
-                        if (!buffer.hasRemaining()) {
-                            buffer.rewind();
-                            int first = buffer.get();
-                            buffer.rewind();
-                            int position = first - ' ' + 1;
-                            buffer.put(rotation, position, 72);
-                            buffer.put((byte) '\r');
-                            buffer.put((byte) '\n');
-                            buffer.flip();
-
-                        }
-                        client.write(buffer);
+                        SelectionKey clientKey = client.register(
+                                selector,
+                                SelectionKey.OP_WRITE |
+                                        SelectionKey.OP_READ);
+                        ByteBuffer buffer = ByteBuffer.allocate(100);
+                        clientKey.attach(buffer);
                     }
-                }catch (IOException ex){
+                    if (key.isReadable()) {
+                        SocketChannel client =
+                                (SocketChannel) key.channel();
+                        ByteBuffer output =
+                                (ByteBuffer) key.attachment();
+                        client.read(output);
+                    }
+                    if (key.isWritable()) {
+                        SocketChannel client =
+                                (SocketChannel) key.channel();
+                        ByteBuffer output =
+                                (ByteBuffer) key.attachment();
+                        output.flip();
+                        client.write(output);
+                        output.compact();
+                    }
+                } catch (IOException ex) {
                     key.cancel();
                     try {
                         key.channel().close();
-                    }catch (IOException exc){
-                    }
+                    } catch (IOException cex) {}
                 }
             }
         }
     }
 }
+
